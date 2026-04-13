@@ -97,6 +97,7 @@ export function useChat() {
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
+          ...(settings.anthropicKey ? { "X-Anthropic-Key": settings.anthropicKey } : {}),
         },
         body: JSON.stringify({
           messages: [...(targetSession?.messages || []), userMessage],

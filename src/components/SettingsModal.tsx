@@ -1,7 +1,7 @@
 "use client";
 
-import { X, Key, ShieldCheck, Palette, Zap, History, Cpu, Cloud, RefreshCw, Copy, Check } from "lucide-react";
-import { OPENAI_MODELS, AppTheme } from "@/lib/types";
+import { X, Key, ShieldCheck, Palette, Zap, History, Cpu, Cloud, RefreshCw, Copy, Check, BrainCircuit } from "lucide-react";
+import { AVAILABLE_MODELS, AppTheme } from "@/lib/types";
 import { useChatContext } from "@/contexts/ChatContext";
 import { useState } from "react";
 
@@ -55,13 +55,14 @@ export function SettingsModal({
         </div>
 
         <div className="space-y-8 max-h-[65vh] overflow-y-auto pr-2 custom-scrollbar pb-4">
+          
           {/* Intelligence Engine */}
           <section className="space-y-3">
             <label className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-30 flex items-center gap-2">
               <Cpu size={12} /> Intelligence Engine
             </label>
             <div className="grid grid-cols-1 gap-2">
-              {OPENAI_MODELS.map((m) => (
+              {AVAILABLE_MODELS.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => setModel(m.id)}
@@ -72,14 +73,50 @@ export function SettingsModal({
                       : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 opacity-60 hover:opacity-100"}
                   `}
                 >
-                  <span className="text-sm font-bold tracking-tight">{m.name}</span>
+                  <div className="flex justify-between w-full items-center">
+                    <span className="text-sm font-bold tracking-tight">{m.name}</span>
+                    <span className="text-[9px] px-2 py-0.5 bg-zinc-200 dark:bg-zinc-800 rounded-full opacity-50 font-bold uppercase tracking-wider">
+                      {m.provider}
+                    </span>
+                  </div>
                   <span className="text-[10px] opacity-40">{m.description}</span>
                 </button>
               ))}
             </div>
           </section>
 
-          {/* Cloud Sync Section (Phase 4) */}
+          {/* API Keys - Multiple Providers (Phase 4.2) */}
+          <section className="space-y-4">
+            <label className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-30 flex items-center gap-2">
+              <BrainCircuit size={12} /> Provider Keys
+            </label>
+            
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold opacity-30 ml-2">OPENAI (GPT-4o)</span>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-3.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold opacity-30 ml-2">ANTHROPIC (Claude 3.5)</span>
+                <input
+                  type="password"
+                  value={settings.anthropicKey || ""}
+                  onChange={(e) => updateSettings({ anthropicKey: e.target.value })}
+                  placeholder="sk-ant-..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-3.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Cloud Sync Section */}
           <section className="space-y-4 p-5 bg-zinc-50 dark:bg-zinc-950/50 rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800">
             <label className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-30 flex items-center gap-2">
               <Cloud size={12} /> Cloud Sync (Supabase)
@@ -127,20 +164,6 @@ export function SettingsModal({
             <p className="text-[10px] opacity-30 leading-relaxed italic">
               * このキーを別のデバイスで入力すると同期が始まります。
             </p>
-          </section>
-
-          {/* API Key Section */}
-          <section className="space-y-3">
-            <label className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-30 flex items-center gap-2">
-              <Key size={12} /> OpenAI API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:ring-1 focus:ring-accent transition-all"
-            />
           </section>
 
           {/* Theme & Aesthetics */}
