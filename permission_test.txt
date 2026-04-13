@@ -1,0 +1,2 @@
+# Permission Check
+This file verifies if I can write to the scratch folder using the write_to_file tool.
