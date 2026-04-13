@@ -9,7 +9,7 @@ interface ChatContextType {
   currentSessionId: string | null;
   setCurrentSessionId: (id: string | null) => void;
   createSession: (title?: string) => ChatSession;
-  updateSession: (id: string, updates: Partial<ChatSession>) => void;
+  updateSession: (id: string, updates: Partial<ChatSession> | ((prev: ChatSession) => Partial<ChatSession>)) => void;
   removeSession: (id: string) => void;
   apiKey: string;
   setApiKey: (key: string) => void;
