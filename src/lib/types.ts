@@ -14,7 +14,7 @@ export type ChatMessage = {
 export type ChatSession = {
   id: string;
   title: string;
-  provider: string; // "openai"
+  provider: string;
   model: string;
   messages: ChatMessage[];
   updatedAt: string;
@@ -26,7 +26,6 @@ export type ModelOption = {
   description: string;
 };
 
-// Phase 3 Final Evolution: 隠し設定としてモデルを保持
 export const OPENAI_MODELS: ModelOption[] = [
   { 
     id: "gpt-4o-search-preview", 
@@ -44,7 +43,11 @@ export type AppTheme = "pure-black" | "glass" | "paper";
 
 export type GlobalSettings = {
   theme: AppTheme;
-  typingSpeed: number; // 0 to 100
+  typingSpeed: number;
   retentionDays: number;
   autoSearch: boolean;
+  // Phase 4: Sync Settings
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  syncKey?: string;
 };
