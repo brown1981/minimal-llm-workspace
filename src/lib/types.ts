@@ -24,7 +24,7 @@ export type ModelOption = {
   id: string;
   name: string;
   description: string;
-  provider: "openai" | "anthropic"; // Phase 4.2 Expansion
+  provider: "openai" | "anthropic" | "google"; // Phase 4.3 Expansion
 };
 
 export const AVAILABLE_MODELS: ModelOption[] = [
@@ -39,6 +39,18 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     name: "Claude 3.5 Sonnet", 
     description: "Exceptional reasoning, speed, and character.",
     provider: "anthropic"
+  },
+  { 
+    id: "gemini-2.5-flash", 
+    name: "Swift & Adaptive (Gemini)", 
+    description: "Google's fastest model with huge context window.",
+    provider: "google"
+  },
+  { 
+    id: "gemini-2.5-pro", 
+    name: "Gemini 2.5 Pro", 
+    description: "Sophisticated reasoning and complex task handling.",
+    provider: "google"
   },
   { 
     id: "gpt-4o-mini-search-preview", 
@@ -62,6 +74,7 @@ export type GlobalSettings = {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   syncKey?: string;
-  // Phase 4.2: Multi-provider Keys
+  // Phase 4.2 & 4.3: Multi-provider Keys
   anthropicKey?: string;
+  geminiKey?: string;
 };

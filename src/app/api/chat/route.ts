@@ -7,16 +7,58 @@ export async function POST(req: Request) {
   try {
     const openaiKey = req.headers.get("Authorization")?.replace("Bearer ", "");
     const anthropicKey = req.headers.get("X-Anthropic-Key");
+    const geminiKey = req.headers.get("X-Gemini-Key");
     
     const { messages, model } = await req.json();
 
-    // Provider Routing
+    // Provider Routing: Google Gemini
+    if (model.startsWith("gemini")) {
+      if (!geminiKey) {
+        return NextResponse.json({ error: "Google API Key is required for Gemini models" }, { status: 401 });
+      }
+
+      // Gemini Content API call
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": geminiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: messages.map((m: any) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }],
+          })),
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 4096,
+          }
+        }),
+      });
+
+      const data = await geminiResponse.json();
+      if (!geminiResponse.ok) {
+        throw new Error(data.error?.message || "Google Gemini API Error");
+      }
+
+      // Extract content from Gemini response structure
+      const assistantText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!assistantText) throw new Error("No response generated from Gemini");
+
+      return NextResponse.json({
+        id: `gemini-${Date.now()}`,
+        role: "assistant",
+        content: assistantText,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Provider Routing: Anthropic Claude
     if (model.startsWith("claude")) {
       if (!anthropicKey) {
         return NextResponse.json({ error: "Anthropic API Key is required for Claude models" }, { status: 401 });
       }
 
-      // Anthropic Messages API call via fetch
       const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -46,15 +88,17 @@ export async function POST(req: Request) {
         createdAt: new Date().toISOString(),
       });
 
-    } else {
-      // Default: OpenAI
-      if (!openaiKey) {
-        return NextResponse.json({ error: "OpenAI API Key is required" }, { status: 401 });
-      }
+    } 
+    
+    // Provider Routing: OpenAI (Default)
+    if (!openaiKey) {
+      return NextResponse.json({ error: "OpenAI API Key is required" }, { status: 401 });
+    }
 
-      const openai = new OpenAI({ apiKey: openaiKey });
-      const isSearchModel = model?.includes("search");
-      
+    const openai = new OpenAI({ apiKey: openaiKey });
+    const isSearchModel = model?.includes("search");
+    
+    try {
       const response = await openai.chat.completions.create({
         model: model || "gpt-4o-mini-search-preview",
         messages: messages.map((m: any) => ({
@@ -72,7 +116,10 @@ export async function POST(req: Request) {
         content: assistantMessage.content,
         createdAt: new Date().toISOString(),
       });
+    } catch (openaiErr: any) {
+      throw new Error(openaiErr.message || "OpenAI API Error");
     }
+    
   } catch (error: any) {
     console.error("Universal API Error:", error);
     return NextResponse.json(

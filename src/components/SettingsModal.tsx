@@ -85,7 +85,7 @@ export function SettingsModal({
             </div>
           </section>
 
-          {/* API Keys - Multiple Providers (Phase 4.2) */}
+          {/* API Keys - Multiple Providers (Phase 4.2 & 4.3) */}
           <section className="space-y-4">
             <label className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-30 flex items-center gap-2">
               <BrainCircuit size={12} /> Provider Keys
@@ -93,7 +93,10 @@ export function SettingsModal({
             
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <span className="text-[9px] font-bold opacity-30 ml-2">OPENAI (GPT-4o)</span>
+                <div className="flex justify-between px-2">
+                  <span className="text-[9px] font-bold opacity-30">OPENAI (GPT-4o)</span>
+                  <a href="https://platform.openai.com/" target="_blank" className="text-[9px] opacity-20 hover:opacity-50 transition-opacity underline">Get Key</a>
+                </div>
                 <input
                   type="password"
                   value={apiKey}
@@ -104,12 +107,29 @@ export function SettingsModal({
               </div>
 
               <div className="space-y-1.5">
-                <span className="text-[9px] font-bold opacity-30 ml-2">ANTHROPIC (Claude 3.5)</span>
+                <div className="flex justify-between px-2">
+                  <span className="text-[9px] font-bold opacity-30">ANTHROPIC (Claude 3.5)</span>
+                  <a href="https://console.anthropic.com/" target="_blank" className="text-[9px] opacity-20 hover:opacity-50 transition-opacity underline">Get Key</a>
+                </div>
                 <input
                   type="password"
                   value={settings.anthropicKey || ""}
                   onChange={(e) => updateSettings({ anthropicKey: e.target.value })}
                   placeholder="sk-ant-..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-3.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between px-2">
+                  <span className="text-[9px] font-bold opacity-30">GOOGLE (Gemini 2.5)</span>
+                  <a href="https://aistudio.google.com/" target="_blank" className="text-[9px] opacity-20 hover:opacity-50 transition-opacity underline">Get Key Free</a>
+                </div>
+                <input
+                  type="password"
+                  value={settings.geminiKey || ""}
+                  onChange={(e) => updateSettings({ geminiKey: e.target.value })}
+                  placeholder="AIza..."
                   className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-3.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent transition-all"
                 />
               </div>
