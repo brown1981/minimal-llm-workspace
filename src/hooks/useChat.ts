@@ -60,8 +60,8 @@ export function useChat() {
     }));
   }, [updateSession]);
 
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim()) return;
+  const sendMessage = useCallback(async (content: string, image?: string | null) => {
+    if (!content.trim() && !image) return;
     if (!apiKey) {
       setError("API Key が設定されていません。設定から入力してください。");
       return;
@@ -69,13 +69,15 @@ export function useChat() {
 
     let targetSession = currentSession;
     if (!targetSession) {
-      targetSession = createSession(content.slice(0, 20) + "...");
+      targetSession = createSession(content.slice(0, 20) || "Image Analysis");
     }
 
+    const fullContent = image ? `${content}\n\n[IMAGE_DATA:${image.slice(0, 50)}...]` : content;
+    
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content,
+      content: image ? `${image}\n\n${content}` : content, // Store image at the start of content for simple detection
       createdAt: new Date().toISOString(),
     };
 
@@ -84,7 +86,7 @@ export function useChat() {
       const updatedMessages = [...prev.messages, userMessage];
       return { 
         messages: updatedMessages,
-        title: prev.messages.length === 0 ? content.slice(0, 20) : prev.title
+        title: prev.messages.length === 0 ? (content.slice(0, 20) || "Image Analysis") : prev.title
       };
     });
 
@@ -103,6 +105,7 @@ export function useChat() {
         body: JSON.stringify({
           messages: [...(targetSession?.messages || []), userMessage],
           model: targetSession?.model || model,
+          image: image // Also send as specialized top-level field for DALL-E or Vision
         }),
       });
 

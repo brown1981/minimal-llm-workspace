@@ -3,13 +3,21 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
+// Helper to extract mime type and base64 data from data URL
+function parseDataUrl(dataUrl: string) {
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matches) return null;
+  return { mimeType: matches[1], base64Data: matches[2] };
+}
+
 export async function POST(req: Request) {
   try {
     const openaiKey = req.headers.get("Authorization")?.replace("Bearer ", "");
     const anthropicKey = req.headers.get("X-Anthropic-Key");
     const geminiKey = req.headers.get("X-Gemini-Key");
     
-    const { messages, model } = await req.json();
+    const { messages, model, image } = await req.json();
+    const imageData = image ? parseDataUrl(image) : null;
 
     // Provider Routing: Google Gemini
     if (model.startsWith("gemini")) {
@@ -25,10 +33,29 @@ export async function POST(req: Request) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: messages.map((m: any) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
-          })),
+          contents: messages.map((m: any, idx: number) => {
+            const isLastMessage = idx === messages.length - 1;
+            const parts = [];
+            
+            // If this is the last message and we have an image attached, add it to parts
+            if (isLastMessage && imageData) {
+              parts.push({
+                inline_data: {
+                  mime_type: imageData.mimeType,
+                  data: imageData.base64Data,
+                }
+              });
+            }
+
+            // Strip the base64 from stored content for the clean payload
+            const textContent = m.content.replace(/data:image\/[^;]+;base64,[^ \n]+/, "").trim();
+            parts.push({ text: textContent });
+
+            return {
+              role: m.role === "assistant" ? "model" : "user",
+              parts
+            };
+          }),
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 4096,
@@ -41,7 +68,6 @@ export async function POST(req: Request) {
         throw new Error(data.error?.message || "Google Gemini API Error");
       }
 
-      // Extract content from Gemini response structure
       const assistantText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!assistantText) throw new Error("No response generated from Gemini");
 
@@ -69,10 +95,28 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           model: model,
           max_tokens: 4096,
-          messages: messages.map((m: any) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: messages.map((m: any, idx: number) => {
+            const isLastMessage = idx === messages.length - 1;
+            const textContent = m.content.replace(/data:image\/[^;]+;base64,[^ \n]+/, "").trim();
+
+            if (isLastMessage && imageData) {
+              return {
+                role: m.role,
+                content: [
+                  {
+                    type: "image",
+                    source: {
+                      type: "base64",
+                      media_type: imageData.mimeType,
+                      data: imageData.base64Data,
+                    },
+                  },
+                  { type: "text", text: textContent },
+                ],
+              };
+            }
+            return { role: m.role, content: textContent };
+          }),
         }),
       });
 
@@ -87,7 +131,6 @@ export async function POST(req: Request) {
         content: data.content[0].text,
         createdAt: new Date().toISOString(),
       });
-
     } 
     
     // Provider Routing: OpenAI (Default)
@@ -98,27 +141,40 @@ export async function POST(req: Request) {
     const openai = new OpenAI({ apiKey: openaiKey });
     const isSearchModel = model?.includes("search");
     
-    try {
-      const response = await openai.chat.completions.create({
-        model: model || "gpt-4o-mini-search-preview",
-        messages: messages.map((m: any) => ({
+    // Format messages for OpenAI Vision/Text
+    const formattedMessages = messages.map((m: any, idx: number) => {
+      const isLastMessage = idx === messages.length - 1;
+      const textContent = m.content.replace(/data:image\/[^;]+;base64,[^ \n]+/, "").trim();
+
+      if (isLastMessage && imageData) {
+        return {
           role: m.role,
-          content: m.content,
-        })),
-        ...(isSearchModel ? { web_search_options: {} } : {}),
-      } as any);
+          content: [
+            { type: "text", text: textContent },
+            { 
+              type: "image_url", 
+              image_url: { url: image, detail: "low" } 
+            },
+          ],
+        };
+      }
+      return { role: m.role, content: textContent };
+    });
 
-      const assistantMessage = response.choices[0].message;
+    const response = await openai.chat.completions.create({
+      model: model || "gpt-4o-mini-search-preview",
+      messages: formattedMessages,
+      ...(isSearchModel ? { web_search_options: {} } : {}),
+    } as any);
 
-      return NextResponse.json({
-        id: response.id,
-        role: "assistant",
-        content: assistantMessage.content,
-        createdAt: new Date().toISOString(),
-      });
-    } catch (openaiErr: any) {
-      throw new Error(openaiErr.message || "OpenAI API Error");
-    }
+    const assistantMessage = response.choices[0].message;
+
+    return NextResponse.json({
+      id: response.id,
+      role: "assistant",
+      content: assistantMessage.content,
+      createdAt: new Date().toISOString(),
+    });
     
   } catch (error: any) {
     console.error("Universal API Error:", error);
