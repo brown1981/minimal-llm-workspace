@@ -109,13 +109,7 @@ export async function POST(req: Request) {
     console.log(`[API:${requestId}] Routing to OpenAI...`);
     if (!openaiKey) return NextResponse.json({ error: "OpenAI API Key is required" }, { status: 401 });
 
-    const openai = new OpenAI({ 
-      apiKey: openaiKey,
-      timeout: 25000, // Client side timeout for safety
-    });
-    const isSearchModel = model?.includes("search");
-    
-    const formattedMessages = messages.map((m: any, idx: number) => {
+    const formattedMessages: any[] = messages.map((m: any, idx: number) => {
       const isLastMessage = idx === messages.length - 1;
       const textContent = m.content.replace(/data:image\/[^;]+;base64,[^ \n]+/, "").trim();
       if (isLastMessage && imageData) {
@@ -130,21 +124,31 @@ export async function POST(req: Request) {
       return { role: m.role, content: textContent };
     });
 
-    if (customInstructions) {
-      formattedMessages.unshift({ role: "system", content: customInstructions });
-    }
+    const AGENT_SYSTEM_PROMPT = `
+あなたは「Engawa Cycle」の優秀なAIエージェント、およびCEO直属の戦略官です。
+現在のタスク: ${customInstructions || "会社運営のサポート"}
 
-    console.log(`[API:${requestId}] OpenAI Request Start...`);
-    const completion = await openai.chat.completions.create({
-      model: model || "gpt-4o-mini",
-      messages: formattedMessages,
-    } as any);
-    console.log(`[API:${requestId}] OpenAI Response Received: ${completion.id}`);
+【行動指針】
+1. 思考の徹底: ツールを使う前に、まず何を知るべきか「計画」を立ててください。
+2. 観察と調整: ツール実行の結果を客観的に評価し、必要なら別の手段を模索してください。
+3. 最小のノイズ: 裏側の試行錯誤は社長に見せず、洗練された「最終回答」のみを丁寧に報告してください。
+4. 誠実さ: 分からないことやAPIエラーについては正直に報告し、解決策を提案してください。
+    `.trim();
 
-    const assistantMessage = completion.choices[0].message;
+    formattedMessages.unshift({ role: "system", content: AGENT_SYSTEM_PROMPT });
 
+    // Phase 6: Advanced Agentic Loop using AgentExecutor
+    const { AgentExecutor } = await import("@/lib/agents/executor");
+    const executor = new AgentExecutor(openaiKey, requestId);
+    
+    console.log(`[API:${requestId}] AgentExecutor.runV2 Start...`);
+    const result = await executor.runV2(formattedMessages, model);
+    
     return NextResponse.json({
-      id: completion.id, role: "assistant", content: assistantMessage.content, createdAt: new Date().toISOString()
+      id: result.id, 
+      role: "assistant", 
+      content: result.content, 
+      createdAt: new Date().toISOString()
     });
     
   } catch (error: any) {
