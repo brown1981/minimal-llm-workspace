@@ -109,7 +109,10 @@ export async function POST(req: Request) {
     console.log(`[API:${requestId}] Routing to OpenAI...`);
     if (!openaiKey) return NextResponse.json({ error: "OpenAI API Key is required" }, { status: 401 });
 
-    const openai = new OpenAI({ apiKey: openaiKey });
+    const openai = new OpenAI({ 
+      apiKey: openaiKey,
+      timeout: 25000, // Client side timeout for safety
+    });
     const isSearchModel = model?.includes("search");
     
     const formattedMessages = messages.map((m: any, idx: number) => {
@@ -135,7 +138,6 @@ export async function POST(req: Request) {
     const completion = await openai.chat.completions.create({
       model: model || "gpt-4o-mini",
       messages: formattedMessages,
-      ...(isSearchModel ? { web_search_options: {} } : {}),
     } as any);
     console.log(`[API:${requestId}] OpenAI Response Received: ${completion.id}`);
 

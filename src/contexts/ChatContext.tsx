@@ -11,7 +11,7 @@ interface ChatContextType {
   setCurrentSessionId: (id: string | null) => void;
   createSession: (title?: string) => ChatSession;
   updateSession: (id: string, updates: Partial<ChatSession> | ((prev: ChatSession) => Partial<ChatSession>)) => void;
-  upsertSession: (session: ChatSession) => void; // New Atomic Upsert
+  upsertSession: (session: ChatSession) => void;
   removeSession: (id: string) => void;
   apiKey: string;
   setApiKey: (key: string) => void;
@@ -30,10 +30,24 @@ const DEFAULT_SETTINGS: GlobalSettings = {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
+// Aggressive Key Sanitation (Phase 34)
+function sanitizeKey(key: string, name: string): string {
+  if (!key) return "";
+  let clean = key.trim();
+  // Remove accidental command prefix if present (Vercel Log evidence found "npx ...")
+  if (clean.toLowerCase().includes("npx ") || clean.toLowerCase().includes("supabase")) {
+    console.warn(`[ChatContext] Detected command-like string in ${name} field. Removing...`);
+    // Heuristic: If SK is hidden somewhere inside, extract it, otherwise clear it.
+    const match = clean.match(/(sk-[a-zA-Z0-9]+)/);
+    return match ? match[1] : "";
+  }
+  return clean;
+}
+
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [model, setModel] = useState<string>("gpt-4o-search-preview");
+  const [model, setModel] = useState<string>("gpt-4o-mini"); // Default to mini for reliability
   const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_SETTINGS);
   const isInitialized = useRef(false);
 
@@ -60,11 +74,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             content: m.content,
             created_at: m.createdAt
           }))
-        );
+        ).select("*"); // Trigger execution instead of .catch
       }
-    } catch (e) {
-      console.warn("Sync failed:", e);
-    }
+    } catch (e) { console.warn("Sync failed:", e); }
   }, [settings.supabaseUrl, settings.supabaseAnonKey, settings.syncKey]);
 
   useEffect(() => {
@@ -73,7 +85,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const savedSettings = localStorage.getItem("workspace_settings");
       let currentSettings = { ...DEFAULT_SETTINGS };
       if (savedSettings) {
-        try { currentSettings = { ...currentSettings, ...JSON.parse(savedSettings) }; } catch (e) {}
+        try { 
+          const parsed = JSON.parse(savedSettings);
+          // Auto-sanitize on load
+          currentSettings = { 
+            ...currentSettings, 
+            ...parsed,
+            openaiKey: sanitizeKey(parsed.openaiKey, "OpenAI"),
+            anthropicKey: sanitizeKey(parsed.anthropicKey, "Anthropic"),
+            geminiKey: sanitizeKey(parsed.geminiKey, "Gemini")
+          };
+        } catch (e) {}
       }
       setSettings(currentSettings);
       try {
@@ -89,13 +111,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const updateSettings = useCallback((updates: Partial<GlobalSettings>) => {
     setSettings(prev => {
-      const next = { ...prev, ...updates };
+      const next = { 
+        ...prev, 
+        ...updates,
+        openaiKey: updates.openaiKey !== undefined ? sanitizeKey(updates.openaiKey, "OpenAI") : prev.openaiKey,
+        anthropicKey: updates.anthropicKey !== undefined ? sanitizeKey(updates.anthropicKey, "Anthropic") : prev.anthropicKey,
+        geminiKey: updates.geminiKey !== undefined ? sanitizeKey(updates.geminiKey, "Gemini") : prev.geminiKey
+      };
       localStorage.setItem("workspace_settings", JSON.stringify(next));
       return next;
     });
   }, []);
 
-  const setApiKey = useCallback((key: string) => updateSettings({ openaiKey: key?.trim() }), [updateSettings]);
+  const setApiKey = useCallback((key: string) => updateSettings({ openaiKey: key }), [updateSettings]);
+  
   const setModelInContext = useCallback((newModel: string) => setModel(newModel), []);
 
   const createSession = useCallback((title = "New Chat") => {
@@ -114,7 +143,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return newSession;
   }, [model, syncToSupabase]);
 
-  // Unified Atomic Upsert (Phase 31)
   const upsertSession = useCallback((session: ChatSession) => {
     setSessions(prev => {
       const idx = prev.findIndex(s => s.id === session.id);
@@ -125,16 +153,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         next = [...prev];
         next[idx] = session;
       }
-      
-      // Ensure current session ID is tracked
-      setCurrentSessionId(session.id);
-      
-      // Persistence
-      dbSaveSession(session);
-      syncToSupabase(session);
-
       return next.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     });
+    setCurrentSessionId(session.id); // Move out of updater
+    dbSaveSession(session);
+    syncToSupabase(session);
   }, [syncToSupabase]);
 
   const updateSession = useCallback((id: string, updates: Partial<ChatSession> | ((prev: ChatSession) => Partial<ChatSession>)) => {

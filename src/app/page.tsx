@@ -87,7 +87,6 @@ export default function Home() {
             messages.map((m, idx) => {
               const isLast = idx === messages.length - 1;
               const displayContent = (isLast && m.role === "assistant" && streamingContent) ? streamingContent : m.content;
-              if (isLast && m.role === "assistant" && !m.content && !streamingContent) return null;
               return (
                 <div key={m.id} className={`group flex flex-col space-y-4 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div className={`chat-bubble px-6 py-5 rounded-[2rem] shadow-sm max-w-[90%] transition-transform duration-300 ${m.role === 'user' ? 'bg-accent text-white rounded-tr-none shadow-accent/20' : 'bg-zinc-100 dark:bg-zinc-900 rounded-tl-none border border-zinc-200 dark:border-zinc-800'}`}>

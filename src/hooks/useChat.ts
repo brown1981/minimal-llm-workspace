@@ -47,22 +47,17 @@ export function useChat() {
 
   const sendMessage = useCallback(async (content: string, image?: string | null) => {
     if (!content.trim() && !image) return;
-    if (isLoading) return; // Immediate lock
+    if (isLoading) return;
 
     if (!apiKey) {
-      setError("API Key が設定されていません。設定から入力してください。");
-      console.warn("[useChat] Attempted to send message without API Key");
+      setError("AI Key が設定されていません。設定画面で API キーを正しく入力してください。");
       return;
     }
 
-    // Step 0: Initializing state immediately
     setIsLoading(true);
     setError(null);
     setStreamingContent("");
 
-    console.log(`[useChat] Starting sendMessage for model: ${model}`);
-
-    // Phase 32/33: Atomic Preparation
     let targetSession = currentSession;
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -74,7 +69,6 @@ export function useChat() {
     let payloadMessages: ChatMessage[] = [];
 
     if (!targetSession) {
-      console.log("[useChat] Creating new session...");
       targetSession = {
         id: crypto.randomUUID(),
         title: content.slice(0, 20) || "Image Analysis",
@@ -86,15 +80,21 @@ export function useChat() {
       upsertSession(targetSession);
       payloadMessages = [userMessage];
     } else {
-      console.log("[useChat] Adding message to existing session:", targetSession.id);
       payloadMessages = [...targetSession.messages, userMessage];
       updateSession(targetSession.id, { messages: payloadMessages });
     }
 
     abortControllerRef.current = new AbortController();
+    
+    const timeoutId = setTimeout(() => {
+      if (isLoading && abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        setError("通信が10秒を超えたためタイムアウトしました (Vercelの制限)。GPT-4o mini 等の軽量モデルへの切り替えをお勧めします。");
+        setIsLoading(false);
+      }
+    }, 12000);
 
     try {
-      console.log(`[useChat] Fetching /api/chat... payload size: ${payloadMessages.length}`);
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -112,17 +112,17 @@ export function useChat() {
         signal: abortControllerRef.current.signal
       });
 
-      console.log(`[useChat] Response status: ${response.status} ${response.statusText}`);
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        const errorMessage = errorData.error || response.statusText;
-        throw new Error(`[${response.status}] ${errorMessage}`);
+        let msg = errorData.error || response.statusText;
+        if (response.status === 401) msg = "認証エラー(401): APIキーが正しくないか、期限が切れています。";
+        if (response.status === 504) msg = "サーバータイムアウト(504): 処理に時間がかかりすぎました。軽量モデルを試してください。";
+        throw new Error(`[${response.status}] ${msg}`);
       }
 
       const data = await response.json();
-      console.log("[useChat] Success! Assistant content received.");
-
       const assistantMessage: ChatMessage = {
         id: data.id || crypto.randomUUID(),
         role: "assistant",
@@ -130,41 +130,54 @@ export function useChat() {
         createdAt: new Date().toISOString(),
       };
 
+      // Phase 35: IMMEDIATE BUBBLE INJECTION
+      // AIからデータが届いた瞬間、空のメッセージ（あるいはプレースホルダ）を配列に追加して画面に出す
+      updateSession(targetSession!.id, (prev) => ({ 
+        messages: [...prev.messages, { ...assistantMessage, content: "" }] 
+      }));
+
       let i = 0;
       const fullContent = data.content || "";
       if (typingIntervalRef.current) { clearInterval(typingIntervalRef.current); typingIntervalRef.current = null; }
       
       if (!fullContent) {
-        console.warn("[useChat] Received empty content from assistant.");
-        updateSession(targetSession!.id, (prev) => ({ messages: [...prev.messages, assistantMessage] }));
+        // もし中身が空なら、空のまま終了させる
         setIsLoading(false);
         return;
       }
 
       typingIntervalRef.current = setInterval(() => {
         if (i < fullContent.length) {
+          // タイピング中の文字を streamingContent に入れる（page.tsx で合成表示する）
           setStreamingContent(prev => prev + fullContent[i]);
           i++;
         } else {
           if (typingIntervalRef.current) { clearInterval(typingIntervalRef.current); typingIntervalRef.current = null; }
-          updateSession(targetSession!.id, (prev) => ({ messages: [...prev.messages, assistantMessage] }));
+          
+          // タイピング完了後、正式にメッセージ内容を確定させる
+          updateSession(targetSession!.id, (prev) => {
+            const nextMessages = [...prev.messages];
+            const lastIdx = nextMessages.length - 1;
+            if (lastIdx >= 0 && nextMessages[lastIdx].role === "assistant") {
+              nextMessages[lastIdx] = { ...assistantMessage }; // 内容を上書き確定
+            }
+            return { messages: nextMessages };
+          });
+
           setStreamingContent("");
           setIsLoading(false);
           abortControllerRef.current = null;
-          console.log("[useChat] Typing effect finished.");
         }
       }, settings.typingSpeed || 20);
 
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        console.log("[useChat] Aborted by user.");
-        return;
-      }
-      console.error("[useChat] Error in sendMessage:", err);
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') return;
       setError(err.message || "Unknown error occurred");
       setIsLoading(false);
       abortControllerRef.current = null;
       setStreamingContent("");
+      console.error("Chat Error:", err);
     }
   }, [apiKey, currentSession, upsertSession, updateSession, model, settings, isLoading]);
 
