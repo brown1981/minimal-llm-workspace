@@ -11,7 +11,9 @@ export function useChat() {
     updateSession, 
     createSession: contextCreateSession,
     apiKey,
+    setApiKey: contextSetApiKey,
     model,
+    setModel: contextSetModel,
     settings
   } = useChatContext();
 
@@ -113,7 +115,7 @@ export function useChat() {
       const assistantMessage: ChatMessage = {
         id: data.id || crypto.randomUUID(),
         role: "assistant",
-        content: data.content,
+        content: data.content || "",
         createdAt: new Date().toISOString(),
       };
 
@@ -121,27 +123,33 @@ export function useChat() {
       let i = 0;
       const fullContent = data.content || "";
       
-      if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+        typingIntervalRef.current = null;
+      }
       
-      typingIntervalRef.current = setInterval(() => {
-        if (!fullContent[i] && i > 0) {
-          if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-          typingIntervalRef.current = null;
-          updateSession(targetSession!.id, (prev) => ({
-            messages: [...prev.messages, assistantMessage]
-          }));
-          setStreamingContent("");
-          setIsLoading(false);
-          abortControllerRef.current = null;
-          return;
-        }
+      // Handle empty response gracefully
+      if (!fullContent) {
+        updateSession(targetSession!.id, (prev) => ({
+          messages: [...prev.messages, assistantMessage]
+        }));
+        setIsLoading(false);
+        abortControllerRef.current = null;
+        return;
+      }
 
-        setStreamingContent(prev => prev + (fullContent[i] || ""));
-        i++;
-        
-        if (i > fullContent.length) {
-          if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-          typingIntervalRef.current = null;
+      typingIntervalRef.current = setInterval(() => {
+        // Correct boundary check: update state only while we have characters to add
+        if (i < fullContent.length) {
+          setStreamingContent(prev => prev + fullContent[i]);
+          i++;
+        } else {
+          // Finish loop
+          if (typingIntervalRef.current) {
+            clearInterval(typingIntervalRef.current);
+            typingIntervalRef.current = null;
+          }
+          
           updateSession(targetSession!.id, (prev) => ({
             messages: [...prev.messages, assistantMessage]
           }));
@@ -152,12 +160,12 @@ export function useChat() {
       }, settings.typingSpeed || 20);
 
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return;
-      }
-      setError(err.message);
+      if (err.name === 'AbortError') return;
+      
+      setError(err.message || "Unknown error occurred");
       setIsLoading(false);
       abortControllerRef.current = null;
+      setStreamingContent("");
     }
   }, [apiKey, currentSession, contextCreateSession, model, updateSession, settings]);
 
@@ -166,9 +174,9 @@ export function useChat() {
     sendMessage,
     stopGeneration,
     apiKey,
-    setApiKey: () => {}, 
+    setApiKey: contextSetApiKey, // Re-connected!
     model,
-    setModel: () => {}, // Managed via context
+    setModel: contextSetModel, // Re-connected!
     clearMessages,
     isLoading,
     error,
